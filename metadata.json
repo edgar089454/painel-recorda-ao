@@ -1,0 +1,7 @@
+{
+  "name": "76 Anos do Vovô",
+  "description": "Um painel comemorativo interativo para celebrar os 76 anos, com linha do tempo, galeria e mensagens.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
