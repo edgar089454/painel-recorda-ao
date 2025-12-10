@@ -13,7 +13,7 @@ const Gallery: React.FC<GalleryProps> = ({ onInteract }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const slideshowInterval = useRef<number | null>(null);
 
-  // Load from local storage on mount (simulating persistence)
+  // Load from local storage on mount
   useEffect(() => {
     const saved = localStorage.getItem('grandpa-gallery');
     if (saved) {
@@ -27,12 +27,16 @@ const Gallery: React.FC<GalleryProps> = ({ onInteract }) => {
 
   // Save to local storage
   useEffect(() => {
-    if (images.length > 0 || localStorage.getItem('grandpa-gallery')) {
-      try {
-        localStorage.setItem('grandpa-gallery', JSON.stringify(images.slice(-10)));
-      } catch (e) {
+    // Only save if we have images or if we need to clear (empty array)
+    // We check against the initial load to avoid overwriting with empty array on first render before load
+    // But since we load in a separate useEffect with [], this runs after.
+    try {
+        // Removed .slice(-10) to persist ALL images
+        localStorage.setItem('grandpa-gallery', JSON.stringify(images));
+    } catch (e) {
         console.warn("Storage quota exceeded, images not saved permanently.");
-      }
+        // We don't alert here constantly to avoid spamming the user on every render, 
+        // but the add function handles the initial alert.
     }
   }, [images]);
 
@@ -62,8 +66,19 @@ const Gallery: React.FC<GalleryProps> = ({ onInteract }) => {
           url: reader.result as string,
           caption: "Nova foto adicionada"
         };
-        setImages(prev => [newImage, ...prev]);
-        onInteract(window.innerWidth / 2, window.innerHeight / 2);
+        
+        // Try to save immediately to check quota
+        try {
+            const potentialNewState = [newImage, ...images];
+            localStorage.setItem('grandpa-gallery', JSON.stringify(potentialNewState));
+            // If successful, update state
+            setImages(potentialNewState);
+            onInteract(window.innerWidth / 2, window.innerHeight / 2);
+        } catch (error) {
+            alert("Espaço de armazenamento cheio! Esta foto não será salva permanentemente.");
+            // We still update state so user sees it in current session
+            setImages(prev => [newImage, ...prev]);
+        }
       };
       reader.readAsDataURL(file);
     }
@@ -71,15 +86,16 @@ const Gallery: React.FC<GalleryProps> = ({ onInteract }) => {
 
   const deleteImage = (id: string, e: React.MouseEvent) => {
     e.preventDefault();
-    e.stopPropagation(); // Impede abrir o lightbox
+    e.stopPropagation();
     if (window.confirm('Tem certeza que deseja excluir esta foto?')) {
       const updated = images.filter(img => img.id !== id);
       setImages(updated);
       try {
          localStorage.setItem('grandpa-gallery', JSON.stringify(updated));
-      } catch(err) {}
+      } catch(err) {
+          console.error("Error updating storage after delete");
+      }
 
-      // Se deletar a imagem que está sendo vista no lightbox, fecha o lightbox
       if (lightboxIndex !== null) {
         setLightboxIndex(null);
       }
@@ -153,7 +169,7 @@ const Gallery: React.FC<GalleryProps> = ({ onInteract }) => {
                 <button
                   type="button"
                   onClick={(e) => deleteImage(img.id, e)}
-                  className="absolute top-2 right-2 p-2 bg-red-500/80 hover:bg-red-600 text-white rounded-full opacity-100 transition-all shadow-md z-50 cursor-pointer"
+                  className="absolute top-2 right-2 p-2 bg-red-500/80 hover:bg-red-600 text-white rounded-full opacity-100 transition-all shadow-md z-20 cursor-pointer"
                   title="Excluir foto"
                 >
                   <Trash2 className="w-4 h-4" />

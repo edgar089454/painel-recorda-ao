@@ -7,17 +7,32 @@ interface MediaPlayerProps {
   className?: string;
   poster?: string; // Para vídeos (opcional)
   onDelete?: () => void; // Callback para exclusão
+  autoPlay?: boolean; // Nova propriedade
 }
 
-const MediaPlayer: React.FC<MediaPlayerProps> = ({ src, type, className = '', poster, onDelete }) => {
+const MediaPlayer: React.FC<MediaPlayerProps> = ({ src, type, className = '', poster, onDelete, autoPlay = false }) => {
   const mediaRef = useRef<HTMLVideoElement | HTMLAudioElement>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [isPlaying, setIsPlaying] = useState(autoPlay);
   const [progress, setProgress] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   const [volume, setVolume] = useState(1);
   const [showVolume, setShowVolume] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Monitora mudanças de fullscreen (ex: via ESC)
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    };
+  }, []);
 
   // Formata segundos em MM:SS
   const formatTime = (time: number) => {
@@ -36,6 +51,19 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({ src, type, className = '', po
         mediaRef.current.play();
       }
       setIsPlaying(!isPlaying);
+    }
+  };
+
+  const toggleFullscreen = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!containerRef.current) return;
+
+    if (!document.fullscreenElement) {
+      containerRef.current.requestFullscreen().catch(err => {
+        console.error(`Error attempting to enable fullscreen: ${err.message}`);
+      });
+    } else {
+      document.exitFullscreen();
     }
   };
 
@@ -92,7 +120,10 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({ src, type, className = '', po
   const onPause = () => setIsPlaying(false);
 
   return (
-    <div className={`relative group bg-stone-900 rounded-xl overflow-hidden shadow-lg border border-stone-800 ${className}`}>
+    <div 
+      ref={containerRef}
+      className={`relative group bg-stone-900 rounded-xl overflow-hidden shadow-lg border border-stone-800 ${className} ${isFullscreen ? 'rounded-none border-none' : ''}`}
+    >
       
       {/* Botão de Excluir no Canto Superior Direito (Apenas para Áudio) */}
       {type === 'audio' && onDelete && (
@@ -100,9 +131,11 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({ src, type, className = '', po
           type="button"
           onClick={(e) => {
             e.stopPropagation();
-            onDelete();
+            if(window.confirm('Tem certeza que deseja excluir?')) {
+               onDelete();
+            }
           }}
-          className="absolute top-2 right-2 p-1.5 text-stone-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors z-20"
+          className="absolute top-2 right-2 p-1.5 text-stone-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors z-50 cursor-pointer"
           title="Excluir áudio"
         >
           <Trash2 className="w-4 h-4" />
@@ -114,12 +147,13 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({ src, type, className = '', po
         <video
           ref={mediaRef as React.RefObject<HTMLVideoElement>}
           src={src}
-          className="w-full h-full object-contain bg-black"
+          className={`w-full h-full object-contain bg-black ${isFullscreen ? 'max-h-screen' : ''}`}
           onTimeUpdate={handleTimeUpdate}
           onLoadedMetadata={handleTimeUpdate}
           onPlay={onPlay}
           onPause={onPause}
           playsInline
+          autoPlay={autoPlay}
           onClick={togglePlay}
           poster={poster}
         />
@@ -131,6 +165,7 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({ src, type, className = '', po
           onLoadedMetadata={handleTimeUpdate}
           onPlay={onPlay}
           onPause={onPause}
+          autoPlay={autoPlay}
         />
       )}
 
@@ -138,7 +173,7 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({ src, type, className = '', po
       <div 
         className={`
           flex flex-col justify-end transition-opacity duration-300
-          ${type === 'video' ? 'absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent opacity-0 group-hover:opacity-100' : 'relative p-3 bg-stone-100'}
+          ${type === 'video' ? 'absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent opacity-100' : 'relative p-3 bg-stone-100'}
         `}
         onClick={(e) => type === 'video' && togglePlay(e)} // No video, clicar no fundo dá play/pause
       >
@@ -218,16 +253,31 @@ const MediaPlayer: React.FC<MediaPlayerProps> = ({ src, type, className = '', po
                 </button>
               </div>
 
+              {/* Fullscreen Button (Only for Video) */}
+              {type === 'video' && (
+                <button 
+                  onClick={toggleFullscreen}
+                  className="p-2 rounded-full text-white hover:bg-white/20 transition-all"
+                  title={isFullscreen ? "Sair da tela cheia" : "Tela cheia"}
+                >
+                  {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
+                </button>
+              )}
+
                {/* Delete Button - Only renders for VIDEO here (Audio is handled at top right) */}
                {onDelete && type === 'video' && (
                 <>
                   <div className={`w-px h-4 mx-1 ${type === 'video' ? 'bg-white/30' : 'bg-stone-300'}`}></div>
                   <button
+                    type="button"
                     onClick={(e) => {
+                      e.preventDefault();
                       e.stopPropagation();
-                      onDelete();
+                      if(window.confirm('Tem certeza que deseja excluir este vídeo?')) {
+                         onDelete();
+                      }
                     }}
-                    className={`p-2 rounded-full transition-colors ${type === 'video' ? 'text-white hover:text-red-400 hover:bg-white/10' : 'text-stone-500 hover:text-red-500 hover:bg-red-50'}`}
+                    className={`p-2 rounded-full transition-colors z-50 cursor-pointer ${type === 'video' ? 'text-white hover:text-red-400 hover:bg-white/10' : 'text-stone-500 hover:text-red-500 hover:bg-red-50'}`}
                     title="Excluir"
                   >
                     <Trash2 className="w-5 h-5" />

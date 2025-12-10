@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Message } from '../types';
-import { Send, Mic, Square, Upload, Trash2 } from 'lucide-react';
+import { Send, Mic, Square, Upload, Trash2, User } from 'lucide-react';
 import MediaPlayer from './MediaPlayer';
 
 interface GuestbookProps {
@@ -14,6 +14,8 @@ const Guestbook: React.FC<GuestbookProps> = ({ onInteract }) => {
   const [isRecording, setIsRecording] = useState(false);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [authorName, setAuthorName] = useState('');
+  
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
 
@@ -26,7 +28,6 @@ const Guestbook: React.FC<GuestbookProps> = ({ onInteract }) => {
     }
   }, []);
 
-  // Convert Blob to Base64 to save in LocalStorage
   const blobToBase64 = (blob: Blob): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -46,7 +47,6 @@ const Guestbook: React.FC<GuestbookProps> = ({ onInteract }) => {
 
     let processedAudio: string | undefined = undefined;
 
-    // Process audio
     try {
         processedAudio = await blobToBase64(audioBlob);
     } catch (err) {
@@ -56,24 +56,28 @@ const Guestbook: React.FC<GuestbookProps> = ({ onInteract }) => {
 
     const newMessage: Message = {
       id: Date.now().toString(),
-      author: 'Mensagem de Voz', 
-      text: 'Mensagem de Voz', // Texto padrão interno
+      author: authorName.trim() || 'Convidado',
+      text: '', 
       date: new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', hour: '2-digit', minute: '2-digit' }),
       audioData: processedAudio
     };
 
     const updated = [newMessage, ...messages];
-    setMessages(updated);
     
+    // Attempt to save to LocalStorage
     try {
         localStorage.setItem('grandpa-messages', JSON.stringify(updated));
+        // Only update state if storage succeeds (or if we want to allow temporary session usage)
+        setMessages(updated);
     } catch (e) {
         console.warn("Quota exceeded for messages/audio");
-        alert("Atenção: O armazenamento local está cheio. O áudio pode não ser salvo permanentemente.");
+        alert("Atenção: O arquivo é muito grande para o armazenamento do navegador. Ele será exibido agora, mas pode sumir ao atualizar a página.");
+        setMessages(updated); // Update anyway for session
     }
     
     setAudioBlob(null);
     setAudioUrl(null);
+    setAuthorName('');
     
     const rect = (e.target as Element).getBoundingClientRect();
     onInteract(rect.left + rect.width / 2, rect.top);
@@ -165,11 +169,8 @@ const Guestbook: React.FC<GuestbookProps> = ({ onInteract }) => {
         </div>
 
         <div className="p-8 md:p-12 grid grid-cols-1 md:grid-cols-2 gap-12">
-          {/* Form */}
           <div>
             <form onSubmit={handleSendMessage} className="space-y-6">
-              
-              {/* Audio Recorder/Upload Widget */}
               <div className="bg-stone-50 p-4 rounded-lg border border-stone-200">
                 <p className="text-sm font-medium text-stone-600 mb-3">Gravar ou Escolher Áudio (Obrigatório)</p>
                 {!audioUrl ? (
@@ -214,6 +215,22 @@ const Guestbook: React.FC<GuestbookProps> = ({ onInteract }) => {
                    </div>
                 )}
               </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-stone-600 mb-1 ml-1">Seu Nome</label>
+                <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <User className="h-5 w-5 text-stone-400" />
+                    </div>
+                    <input
+                        type="text"
+                        value={authorName}
+                        onChange={(e) => setAuthorName(e.target.value)}
+                        placeholder="Ex: Neto João"
+                        className="block w-full pl-10 pr-3 py-3 border border-stone-300 rounded-lg focus:ring-gold-500 focus:border-gold-500 sm:text-sm bg-white"
+                    />
+                </div>
+              </div>
 
               <button 
                 type="submit" 
@@ -226,7 +243,6 @@ const Guestbook: React.FC<GuestbookProps> = ({ onInteract }) => {
             </form>
           </div>
 
-          {/* List */}
           <div className="space-y-6 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
             {messages.length === 0 ? (
               <div className="text-center py-10 text-stone-400">
@@ -236,10 +252,9 @@ const Guestbook: React.FC<GuestbookProps> = ({ onInteract }) => {
             ) : (
               messages.map((msg) => (
                 <div key={msg.id} className="bg-amber-50/50 p-5 rounded-xl border border-amber-100 relative hover:bg-amber-50 transition-colors group">
-                  <div className="flex justify-between items-start mb-3 pr-2">
-                    <div>
-                        <span className="text-xs text-stone-400 block mb-1">{msg.date}</span>
-                    </div>
+                  <div className="mb-3 pr-2">
+                    <h4 className="font-serif font-bold text-stone-800 text-lg">{msg.author}</h4>
+                    <span className="text-xs text-stone-400 block">{msg.date}</span>
                   </div>
                   
                   {msg.audioData ? (
